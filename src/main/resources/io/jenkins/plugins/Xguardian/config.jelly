@@ -1,0 +1,190 @@
+<?jelly escape-by-default='true'?>
+
+<j:jelly xmlns:j="jelly:core" xmlns:st="jelly:stapler" xmlns:d="jelly:define" xmlns:l="/lib/layout" xmlns:t="/lib/hudson" xmlns:f="/lib/form">
+    <style>
+        .styled-input {
+        background: var(--input-color);
+        border: 2px solid var(--input-border);
+        border-radius: var(--form-input-border-radius);
+        box-shadow: var(--form-input-glow);
+        display: block;
+        padding: var(--form-input-padding);
+        transition: all var(--standard-transition),height 0s,padding 0s;
+        width: 100%;
+        }
+
+        .purple-button {
+        background-color: #4D277A;
+        color: white;
+        padding: 8px 16px;
+        font-size: 14px;
+        border: none;
+        cursor: pointer;
+        border-radius: 4px;
+        }
+
+        .margin{
+        margin-right: 10px;
+        margin-bottom: 10px;
+        }
+
+        input[type="checkbox"]:checked {
+        background-color: #4D277A;
+        color: white;
+        }
+
+    </style>
+    <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+    <script>
+
+        function testConnection(event) {
+        event.preventDefault();
+        var email = document.getElementsByName('email')[0].value;
+        var password = document.getElementsByName('password')[0].value;
+        var statusElement = document.getElementById('xguardian-status');
+        var data = {
+        email: email,
+        password: password,
+        };
+
+        fetch("https://auth.development.xguardianplatform.io/login", {
+        method: 'POST',
+        headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
+        },
+        body: JSON.stringify(data)
+        })
+        .then(response => response.json())
+        .then(data => {
+        if (data.status === 'ok' &amp;&amp; data.token) {
+        localStorage.setItem('xguardianToken', data.token);
+        localStorage.setItem('email', email);
+        localStorage.setItem('password', password);
+        statusElement.textContent = 'Connection successful!';
+        } else {
+        // Limpa o token do local storage em caso de erro de autenticação
+        localStorage.removeItem('xguardianToken');
+        statusElement.textContent = 'Connection failed.';
+        }
+        })
+        .catch(error => {
+        console.error('Error during connection test:', error);
+        statusElement.textContent = 'Error during connection test.';
+        });
+        }
+
+        function getApplications(event) {
+        event.preventDefault();
+        var applicationsDropdown = document.getElementById('xguardian-applications');
+        var statusElement = document.getElementById('xguardian-status');
+        var token = localStorage.getItem('xguardianToken');
+
+        // Verifica se há um token válido antes de fazer a requisição
+        if (!token) {
+        console.error('Token not found or invalid.');
+        statusElement.textContent = 'Token not found or invalid.';
+        return;
+        }
+
+        var url = "https://uploader-mvp.development.xguardianplatform.io/get_apps_total?token=" + encodeURIComponent(token);
+
+        fetch(url, {
+        method: 'GET',
+        headers: {
+        'Accept': 'application/json'
+        }
+        })
+        .then(response => {
+        // Verifica se a resposta é bem-sucedida e se o status é 200 (OK)
+        if (response.ok) {
+        return response.json(); // Converte a resposta para JSON
+        } else {
+        throw new Error('Failed to load applications'); // Lança um erro se a resposta não for bem-sucedida
+        }
+        })
+        .then(data => {
+        // Atualiza o elemento de status com uma mensagem de sucesso
+        statusElement.textContent = "Applications loaded successfully.";
+
+        applicationsDropdown.innerHTML = '';
+
+        data.forEach(application => {
+        var option = document.createElement('option');
+        option.value = application.id;
+        option.text = application.name;
+        applicationsDropdown.appendChild(option);
+        });
+        })
+        .catch(error => {
+        // Em caso de erro, exibe uma mensagem de erro e limpa o token do local storage
+        console.error('Error getting applications:', error);
+        statusElement.textContent = 'Error getting applications.';
+        localStorage.removeItem('xguardianToken');
+        });
+        }
+
+        function saveApplicationId() {
+        var applicationsDropdown = document.getElementById('xguardian-applications');
+        var selectedApplicationId = applicationsDropdown.value;
+
+        localStorage.setItem('appid', selectedApplicationId);
+
+        var displayApplicationId = document.getElementById('displayApplicationId');
+        displayApplicationId.textContent = selectedApplicationId;
+        }
+
+
+        document.addEventListener('DOMContentLoaded', function() {
+        var applicationsDropdown = document.getElementById('xguardian-applications');
+
+        var savedAppId = localStorage.getItem('appid');
+        if (savedAppId) {
+        applicationsDropdown.value = savedAppId;
+        saveApplicationId(); // Chama a função para atualizar o campo exibido
+        }
+        var savedEmail = localStorage.getItem('email');
+        var savedPassword = localStorage.getItem('password');
+        if (savedEmail) {
+        document.getElementsByName('email')[0].value = savedEmail;
+        }
+        if (savedPassword) {
+        document.getElementsByName('password')[0].value = savedPassword;
+        }
+
+        applicationsDropdown.addEventListener('change', function() {
+        // Quando a aplicação for selecionada, chame a função para salvar o app_id
+        saveApplicationId();
+        });
+        });
+    </script>
+
+    <f:section title="Configurações XGuardian">
+        <f:entry title="${%Email}" field="email">
+            <f:textbox name="email" value="${descriptor.email}" />
+        </f:entry>
+        <f:entry title="${%Password}" field="password">
+            <input type="password" name="password"  value="${descriptor.password}" class="styled-input"/>
+        </f:entry>
+        <f:entry title="${%Test Connection}">
+            <button class="purple-button" onclick="testConnection(event)">Test connection</button>
+        </f:entry>
+        <f:entry title="${%Status}" help="/plugin/xguardian/help/status.html">
+            <div id="xguardian-status" class="form-control-static"></div>
+        </f:entry>
+        <f:entry title="${%Applications}" help="/plugin/xguardian/help/applications.html">
+            <button class="purple-button margin" onclick="getApplications(event)">Get applications</button>
+            <select id="xguardian-applications" class="form-control styled-input" name="applicationId" ></select>
+        </f:entry>
+        <f:entry title="${%Scan Version}" field="scanVersion" >
+            <f:textbox name="scanVersion" value="${descriptor.scanVersion}" />
+        </f:entry>
+        <f:entry>
+            <f:checkbox title="${%SAST}" field="sastCheckbox" checked="${descriptor.sastCheckbox}" id="sastCheckbox" />
+        </f:entry>
+        <f:entry>
+            <f:checkbox title="${%SCA}" field="scaCheckbox" checked="${descriptor.scaCheckbox}" id="scaCheckbox" />
+        </f:entry>
+    </f:section>
+
+</j:jelly>
