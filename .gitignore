@@ -12,7 +12,6 @@ work/
 *.iml
 *.ipr
 .idea
-Jenkinsfile
 
 ### Eclipse ###
 .apt_generated
